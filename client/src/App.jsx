@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react'
 
+
+
 const Login = ({ login })=> {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -17,13 +19,34 @@ const Login = ({ login })=> {
   );
 }
 
+const Register = ({ register })=> {
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+
+  const submit = ev => {
+    ev.preventDefault();
+    register({ username, password });
+  }
+  return (
+    <form onSubmit={ submit }>
+      <input value={ username } placeholder='username' onChange={ ev=> setUsername(ev.target.value)}/>
+      <input value={ password} placeholder='password' onChange={ ev=> setPassword(ev.target.value)}/>
+      <button disabled={ !username || !password }>Create User</button>
+    </form>
+  );
+}
+
 function App() {
   const [auth, setAuth] = useState({});
   const [products, setProducts] = useState([]);
   const [favorites, setFavorites] = useState([]);
+  const [error, setError] = useState(null);
 
   useEffect(()=> {
-    attemptLoginWithToken();
+    const token = window.localStorage.getItem('token');
+    if(token){
+      attemptLoginWithToken();
+    }
   }, []);
 
   const attemptLoginWithToken = async()=> {
@@ -48,7 +71,12 @@ function App() {
     const fetchProducts = async()=> {
       const response = await fetch('/api/products');
       const json = await response.json();
-      setProducts(json);
+      if (response.ok) {
+        setProducts(json);
+      }
+      else{
+        console.log(json);
+      }
     };
 
     fetchProducts();
@@ -56,10 +84,16 @@ function App() {
 
   useEffect(()=> {
     const fetchFavorites = async()=> {
-      const response = await fetch(`/api/users/${auth.id}/favorites`);
+      const response = await fetch(`/api/users/${auth.id}/favorites`, {
+        headers: {
+          authorization: window.localStorage.getItem('token')
+        }
+      });
       const json = await response.json();
-      if(response.ok){
+      if (response.ok) {
         setFavorites(json);
+      } else {
+        console.log(json);
       }
     };
     if(auth.id){
@@ -83,9 +117,30 @@ function App() {
     if(response.ok){
       window.localStorage.setItem('token', json.token);
       attemptLoginWithToken();
+      setError(null);
     }
     else {
       console.log(json);
+      setError("Invalid credentials.");
+    }
+  };
+
+  const register = async(newCredentials)=> {
+    const response = await fetch('/api/users', {
+      method: 'POST',
+      body: JSON.stringify(newCredentials),
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+    const json = await response.json();
+    if(await response.ok){
+      login(newCredentials);
+      setError(null);
+    }
+    else {
+      console.log(json);
+      setError("Unable to create your account.");
     }
   };
 
@@ -94,7 +149,8 @@ function App() {
       method: 'POST',
       body: JSON.stringify({ product_id }),
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        authorization: window.localStorage.getItem('token')
       }
     });
 
@@ -110,6 +166,9 @@ function App() {
   const removeFavorite = async(id)=> {
     const response = await fetch(`/api/users/${auth.id}/favorites/${id}`, {
       method: 'DELETE',
+      headers: {
+        authorization: window.localStorage.getItem('token')
+      }
     });
 
     if(response.ok){
@@ -123,12 +182,19 @@ function App() {
   const logout = ()=> {
     window.localStorage.removeItem('token');
     setAuth({});
+    setError(null);
   };
 
   return (
     <>
       {
         !auth.id ? <Login login={ login }/> : <button onClick={ logout }>Logout { auth.username }</button>
+      }
+      {
+        !auth.id && <Register register={ register }/>
+      }
+      {
+        (error && !auth.id) && <p className='submission_error' style={{color: "red"}}>{error}</p>
       }
       <ul>
         {
